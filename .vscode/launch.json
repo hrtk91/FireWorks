@@ -1,0 +1,17 @@
+{
+    // IntelliSense を使用して利用可能な属性を学べます。
+    // 既存の属性の説明をホバーして表示します。
+    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "chrome",
+            "request": "launch",
+            "runtimeArgs": ["--disable-web-security", "--user-data-dir"],
+            "name": "Launch Chrome against localhost",
+            "url": "${workspaceFolder}/docs/index.html",
+            "webRoot": "${workspaceFolder}"
+            //C:\\Users\\ht912\\source\\repos\\jswork\\phina.js\\fireworks\\index.html
+        }
+    ]
+}
