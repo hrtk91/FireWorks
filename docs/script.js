@@ -11,7 +11,6 @@ var ASSETS = {
 
 phina.define('MainScene', {
   superClass: 'DisplayScene',
-  
   init: function() {
     this.superInit();
     var grad = Canvas.createLinearGradient(0, 0, 0,960);
@@ -19,27 +18,71 @@ phina.define('MainScene', {
     grad.addColorStop(0.7, '#113');
     grad.addColorStop(1, '#116');
     this.backgroundColor = grad;
+    var firespan = this.firespan = 60;
+    this.label = Label({
+      text: 'FireSpan:' + ('000' + this.firespan.toString()).slice(-3),
+      fontSize: 20,
+      fill: 'rgba(255, 255, 255, 1)',
+      x: this.gridX.span(2),
+      y: this.gridY.span(0) + 20,
+    }).addChildTo(this);
+    var upButton = Button({
+      text: 'up', fontSize: 20,
+      width: 65, height: 50,
+      fill: 'hsla(240, 75%, 50%, 0.2)',
+      x: this.gridX.span(1),
+      y: this.gridY.span(1),
+    }).addChildTo(this);
+    var downButton = Button({
+      text: 'down', fontSize: 20,
+      width: 65, height: 50,
+      fill: 'hsla(240, 75%, 50%, 0.2)',
+      x: this.gridX.span(3),
+      y: this.gridY.span(1),
+    }).addChildTo(this);
+
+    upButton.on('pointend', function (app) {
+      if (this.firespan > 255) return;
+      this.firespan++;
+      const numstr = ('000' + this.firespan.toString()).slice(-3);
+      this.label.text = 'FireSpan:' + numstr;
+    }.bind(this));
+    downButton.on('pointend', function (app) {
+      if (this.firespan <= 1) return;
+      this.firespan--;
+      const numstr = ('000' + this.firespan.toString()).slice(-3);
+      this.label.text = 'FireSpan:' + numstr;
+    }.bind(this));
+    upButton.on('pointover', function (app) {
+      var prev = this.fill;
+      this.fill = 'hsla(240, 75%, 50%, 0.7';
+      this.one('pointout', function (app) {
+        this.fill = prev;
+      });
+    });
+    downButton.on('pointover', function (app) {
+      var prev = this.fill;
+      this.fill = 'hsla(240, 75%, 50%, 0.7';
+      this.one('pointout', function (app) {
+        this.fill = prev;
+      });
+    });
     //SoundManager.playMusic('bgm');
   },
   update: function (app) {
-    if (app.frame % 60 === 0) {
-      var fireworks = FireWorks;
-      /*
-      if (app.frame % 2 === 0)
-        fireworks = FireWorks;
-      else if (app.frame % 3 === 0)
-        fireworks = Cluster;
-      */
-      var p = fireworks({
+    if (app.frame % this.firespan === 0) {
+      const works = [FireWorks, Cluster];
+      const subs = Math.randint(0, 1);
+      var p = works[subs]({
         strokeWidth: 0,
         fill: 'hsla({0}, 100%, 60%, 1)'.format(Math.randint(0, 360)),
         radius: 2,
         flowerRadius: Math.random() + 1,
+        life: Math.randint(60, 200)
       }).addChildTo(this);
       p.blendMode = 'lighter';
       p.setPosition(Math.randint(0, 600), 960);
       p.v = Vector2(0, -Math.randint(7, 12));
-      p.off('tod', p.remove);
     }
     
     if (app.keyboard.getKey('escape')) {
@@ -55,9 +98,10 @@ phina.define('Particle', {
     this.superInit(option);
     this.v = Vector2(0, 0);
     this.blendMode = 'lighter';
-    this.life = this.maxlife = option.life || 50;
+    this.life = this.maxlife = option.life || 60;
     this.friction = option.friction || 0.987;
-    this.on('tod', this.remove);
+    this.scaled = 0.99;
+    this.on('death', this.remove);
   },
   setLife: function (life) {
     this.life = this.maxlife = life;
@@ -66,13 +110,16 @@ phina.define('Particle', {
   update: function (app) {
     this.position.add(this.v);
     this.v.mul(this.friction);
-    this.alpha = (this.life / this.maxlife) * this.v.length();
+    this.scale.mul(this.scaled);
+    this.alpha = (this.life / this.maxlife);
     
-    if (app.frame % 5 === 0)
+    //if (app.frame % 10 === 0)
       this.life--;
     
-    if (this.life <= 0)
-      this.flare('tod');
+    if (this.life <= 0) {
+      this.flare('beforeDeath');
+      this.flare('death');
+    }
   },
 });
 
@@ -83,6 +130,7 @@ phina.define('FireWorks', {
     this.superInit(option);
     this.flowerRadius = option.flowerRadius || 1.5;
     this.flowerNum = option.flowerNum || 30;
+    this.on('beforeDeath', this.explosion);
   },
   outer: function (outers) {
     var self = this;
@@ -142,15 +190,15 @@ phina.define('FireWorks', {
     const inners = this.createInners({num:flowerNum});
     this.outer(outers);
     this.inner(inners);
+    SoundManager.play('se' + Math.randint(1, 2).toString());
   },
   update: function (app) {
     Particle.prototype.update.call(this, app);
-    
-    if (this.v.length() < 1) {
-      this.explosion();
-      SoundManager.play('se' + Math.randint(1, 2).toString());
-      this.remove();
+    /*
+    if (this.alpha < 0.1) {
+      this.flare('beforeDeath');
     }
+    */
   },
 });
 
@@ -163,7 +211,7 @@ phina.define('Cluster', {
   createInners: function (option) {
     option = option || {};
     const inners = [];
-    const flowerNum = 5;
+    const flowerNum = 15;
     for (var i = 0; i < flowerNum; i++) {
       var p = FireWorks({
         fill: option.fill,
@@ -171,6 +219,7 @@ phina.define('Cluster', {
         strokeWidth: option.strokeWidth || 0,
         flowerNum: flowerNum,
         flowerRadius: 1,
+        life: Math.randint(80, 120)
       });
       inners.push(p);
     }
