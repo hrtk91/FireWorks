@@ -9,6 +9,37 @@ var ASSETS = {
   }
 };
 
+phina.define('ObjectPool', {
+  superClass: 'DisplayElement',
+  pool: [],
+  init: function (option) {
+    this.superInit(option);
+  },
+  create: function (clazz, option) {
+    var pool = this.pool[clazz.prototype.className];
+    if (!pool) {
+      pool = this.pool[clazz.prototype.className] = [];
+    }
+    var reuse = pool.pop();
+
+    if (reuse) {
+      reuse.init(option);
+      pool.eraseIf(function (v) { return v === reuse; });
+    }
+
+    var obj = reuse || clazz(option);
+    obj.on('removed', function (evt) {
+      pool.push(evt.target);
+    }.bind(this));
+    obj.on('added', function (evt) {
+      pool.eraseIf(function (v) { return v === obj});
+    }.bind(this));
+
+    return obj;
+  },
+});
+const Pool = ObjectPool();
+
 phina.define('MainScene', {
   superClass: 'DisplayScene',
   init: function() {
@@ -18,7 +49,7 @@ phina.define('MainScene', {
     grad.addColorStop(0.7, '#113');
     grad.addColorStop(1, '#116');
     this.backgroundColor = grad;
-    var firespan = this.firespan = 60;
+    this.firespan = 60;
     this.label = Label({
       text: 'FireSpan:' + ('000' + this.firespan.toString()).slice(-3),
       fontSize: 20,
@@ -73,7 +104,7 @@ phina.define('MainScene', {
     if (app.frame % this.firespan === 0) {
       const works = [FireWorks, Cluster];
       const subs = Math.randint(0, 1);
-      var p = works[subs]({
+      var p = Pool.create(works[subs], {
         strokeWidth: 0,
         fill: 'hsla({0}, 100%, 60%, 1)'.format(Math.randint(0, 360)),
         radius: 2,
@@ -101,20 +132,14 @@ phina.define('Particle', {
     this.life = this.maxlife = option.life || 60;
     this.friction = option.friction || 0.987;
     this.scaled = 0.99;
-    this.on('death', this.remove);
-  },
-  setLife: function (life) {
-    this.life = this.maxlife = life;
-    return this;
+    this.one('death', this.remove);
   },
   update: function (app) {
     this.position.add(this.v);
     this.v.mul(this.friction);
     this.scale.mul(this.scaled);
     this.alpha = (this.life / this.maxlife);
-    
-    //if (app.frame % 10 === 0)
-      this.life--;
+    this.life--;
     
     if (this.life <= 0) {
       this.flare('beforeDeath');
@@ -130,7 +155,7 @@ phina.define('FireWorks', {
     this.superInit(option);
     this.flowerRadius = option.flowerRadius || 1.5;
     this.flowerNum = option.flowerNum || 30;
-    this.on('beforeDeath', this.explosion);
+    this.one('beforeDeath', this.explosion);
   },
   outer: function (outers) {
     var self = this;
@@ -149,7 +174,7 @@ phina.define('FireWorks', {
     const outers = [];
     const flowersNum = option.num;
     for (var i = 0; i < flowersNum; i++) {
-      var p = Particle({
+      var p = Pool.create(Particle, {
         fill: option.fill || 'Silver',
         radius: option.radius || 3,
         strokeWidth: option.strokeWidth || 0,
@@ -175,7 +200,7 @@ phina.define('FireWorks', {
     const flowerNum = option.num;
     const inners = [];
     for (var i = 0; i < flowerNum; i++) {
-      var p = Particle({
+      var p = Pool.create(Particle, {
         fill: option.fill || 'Gold',
         radius: option.radius || 5,
         strokeWidth: option.strokeWidth || 0,
@@ -194,11 +219,6 @@ phina.define('FireWorks', {
   },
   update: function (app) {
     Particle.prototype.update.call(this, app);
-    /*
-    if (this.alpha < 0.1) {
-      this.flare('beforeDeath');
-    }
-    */
   },
 });
 
@@ -213,7 +233,7 @@ phina.define('Cluster', {
     const inners = [];
     const flowerNum = 15;
     for (var i = 0; i < flowerNum; i++) {
-      var p = FireWorks({
+      var p = Pool.create(FireWorks, {
         fill: option.fill,
         radius: option.radius || 5,
         strokeWidth: option.strokeWidth || 0,
@@ -226,6 +246,8 @@ phina.define('Cluster', {
     return inners;
   },
 });
+
+
 
 phina.main(function() {
   var app = GameApp({
